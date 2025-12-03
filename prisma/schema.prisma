@@ -1,0 +1,412 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SYSTEM_ADMIN
+  TENANT_ADMIN
+  TENANT_USER
+  API_USER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum OrderStatus {
+  DRAFT
+  PLACED
+  PROCESSING
+  OUT_FOR_DELIVERY
+  SHIPPED
+  DELIVERED
+  RETURNED
+  CANCELLED
+  TRANSIT_FAILURE
+  ERROR
+  HOLD
+}
+
+enum ShippingStatus {
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILURE
+  ERROR
+  OTHER
+}
+
+model User {
+  id                  String          @id @default(uuid()) @map("id") @db.Uuid
+  firstName           String?         @map("first_name")
+  lastName            String?         @map("last_name")
+  email               String          @unique @map("email")
+  password            String          @map("password")
+  isEmailVerified     Boolean         @default(false) @map("is_email_verified")
+  isActive            Boolean         @default(true) @map("is_active")
+  role                Role            @default(TENANT_ADMIN) @map("role")
+  tenantId            String?         @map("tenant_id") @db.Uuid
+  tenant              Tenant?         @relation(fields: [tenantId], references: [id])
+  forgotPasswordToken String?         @map("forgot_password_token")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  patients            Patient[]
+  prescribers         Prescriber[]
+  orders              Order[]
+  webhooks            TenantWebhook[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id                String          @id @default(uuid()) @map("id") @db.Uuid
+  name              String          @map("name")
+  email             String          @map("email")
+  isActive          Boolean         @default(true) @map("is_active")
+  defaultProviderId String          @map("default_provider_id") @db.Uuid
+  defaultProvider   Provider        @relation(fields: [defaultProviderId], references: [id])
+  isProvider        Boolean         @default(false) @map("is_provider")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  addresses         Address[]
+  users             User[]
+  orders            Order[]
+  patients          Patient[]
+  prescribers       Prescriber[]
+  webhooks          TenantWebhook[]
+
+  @@map("tenants")
+}
+
+model Provider {
+  id                String    @id @default(uuid()) @map("id") @db.Uuid
+  name              String    @map("name")
+  code              String    @unique @map("code")
+  isEnabled         Boolean   @default(true) @map("is_enabled")
+  placeOrder        Boolean   @default(true) @map("place_order")
+  baseUrl           String?   @map("base_url")
+  username          String?   @map("username")
+  password          String?   @map("password")
+  vendorId          String?   @map("vendor_id")
+  locationId        String?   @map("location_id")
+  networkId         String?   @map("network_id")
+  token             String?   @map("token")
+  statusId          String?   @map("status_id")
+  practiceId        String?   @map("practice_id")
+  shippingServiceId String?   @map("shipping_service_id")
+  states            String[]  @map("states")
+  countries         String[]  @map("countries")
+  tokenUpdatedAt    DateTime? @map("token_updated_at")
+  tokenExpireAt     DateTime? @map("token_expire_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  tenants           Tenant[]
+  drugs             Drug[]
+  orders            Order[]
+  locations         Location[]
+
+  @@map("providers")
+}
+
+model Location {
+  id         String   @id @default(uuid()) @map("id") @db.Uuid
+  code       String   @map("code")
+  name       String   @map("name")
+  isEnabled  Boolean  @default(true) @map("is_enabled")
+  providerId String   @map("provider_id") @db.Uuid
+  provider   Provider @relation(fields: [providerId], references: [id])
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  orders     Order[]
+
+  @@unique(name: "uniqueProviderLocation", fields: [providerId, code])
+  @@map("locations")
+}
+
+model Patient {
+  id          String    @id @default(uuid()) @map("id") @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  email       String?   @map("email")
+  firstName   String    @map("first_name")
+  lastName    String    @map("last_name")
+  ssn         String?   @map("ssn")
+  dob         DateTime  @map("dob") @db.Date
+  gender      Gender    @map("gender")
+  phoneNumber String    @map("phone_number")
+  metadata    Json?     @map("metadata")
+  createdById String    @map("created_by_id") @db.Uuid
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  orders      Order[]
+  addresses   Address[]
+
+  @@unique(name: "uniquePatient", fields: [firstName, lastName, dob, gender, tenantId])
+  @@map("patients")
+}
+
+model Prescriber {
+  id          String    @id @default(uuid()) @map("id") @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  firstName   String    @map("first_name")
+  lastName    String    @map("last_name")
+  title       String?   @map("title")
+  titleSuffix String?   @map("title_suffix")
+  npi         String    @map("npi")
+  dea         String?   @map("dea")
+  email       String?   @map("email")
+  phoneNumber String?   @map("phone_number")
+  metadata    Json?     @map("metadata")
+  createdById String    @map("created_by_id") @db.Uuid
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  orders      Order[]
+  addresses   Address[]
+  stateLicenses PrescriberStateLicense[]
+  supervisingPhysicianOrders Order[] @relation("SupervisingPhysician")
+
+  @@unique(name: "uniquePrescriber", fields: [tenantId, npi])
+  @@map("prescribers")
+}
+
+model Drug {
+  id             String      @id @default(uuid()) @map("id") @db.Uuid
+  providerId     String      @map("provider_id") @db.Uuid
+  provider       Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  name           String      @map("name")
+  code           String      @map("provider_code")
+  form           String?     @map("form")
+  strength       String?     @map("strength")
+  price          Decimal     @map("price") @db.Decimal(12, 4)
+  packaging      String?     @map("packaging")
+  quantities     String[]    @map("quantities")
+  quantityUnit   String?     @map("quantity_unit")
+  daysSupply     Int[]       @map("days_supply")
+  directions     String[]    @map("directions")
+  partnerId      String?     @map("partner_id") @db.Uuid
+  partner        Partner?    @relation(fields: [partnerId], references: [id])
+  isEnabled      Boolean     @default(true) @map("is_enabled")
+  useRemotePrice Boolean     @default(false) @map("use_remote")
+  states         String[]    @map("states")
+  customFields   Json?       @map("custom_fields")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  orderItems     OrderItem[]
+
+  @@map("drugs")
+}
+
+model Order {
+  id                String         @id @default(uuid()) @map("id") @db.Uuid
+  prescriptionId    Int            @default(autoincrement()) @map("prescription_id")
+  tenantId          String         @map("tenant_id") @db.Uuid
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId         String         @map("patient_id") @db.Uuid
+  patient           Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  providerOrderId   String?        @map("provider_order_id")
+  error             String?        @map("error")
+  status            OrderStatus    @default(DRAFT) @map("status")
+  providerStatus    String         @default("PENDING") @map("provider_status")
+  amount            Decimal        @default(0) @map("amount") @db.Decimal(12, 4)
+  tax               Decimal        @default(0) @map("tax") @db.Decimal(12, 4)
+  shippingAmount    Decimal        @default(0) @map("shipping_amount") @db.Decimal(12, 4)
+  prescriberId      String?        @map("prescriber_id") @db.Uuid
+  prescriber        Prescriber?    @relation(fields: [prescriberId], references: [id])
+  supervisingPhysicianId String?      @map("supervising_physician_id") @db.Uuid
+  supervisingPhysician   Prescriber?  @relation("SupervisingPhysician", fields: [supervisingPhysicianId], references: [id])
+  tracking          String?        @map("tracking")
+  carrierName       String?        @map("carrier_name")
+  estDeliveryAt     DateTime?      @map("est_delivery_at")
+  trackingUrl       String?        @map("tracking_url")
+  providerId        String         @map("provider_id") @db.Uuid
+  provider          Provider       @relation(fields: [providerId], references: [id])
+  createdById       String         @map("created_by_id") @db.Uuid
+  createdBy         User           @relation(fields: [createdById], references: [id])
+  partnerId         String?        @map("partner_id") @db.Uuid
+  partner           Partner?       @relation(fields: [partnerId], references: [id])
+  locationId        String?        @map("location_id") @db.Uuid
+  location          Location?      @relation(fields: [locationId], references: [id])
+  statusUpdatedAt   DateTime       @default(now()) @map("status_updated_at")
+  metadata          Json?          @map("metadata")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+  address           Address?       @relation("orderAddress")
+  prescriberAddress Address?       @relation("prescriberOrderAddress")
+  dateWritten       DateTime?      @map("date_written")
+  dateSigned        DateTime?      @map("date_signed")
+  datePrescribed    DateTime?      @map("date_prescribed")
+  items             OrderItem[]
+  logs              OrderHistory[]
+  shippingLogs      Shipping[]
+
+  @@map("orders")
+}
+
+model OrderHistory {
+  id              String   @id @default(uuid()) @map("id") @db.Uuid
+  orderId         String   @map("order_id") @db.Uuid
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status          String   @default("PENDING") @map("status")
+  statusUpdatedAt DateTime @default(now()) @map("status_updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("order_histories")
+}
+
+model OrderItem {
+  id                   String             @id @default(uuid()) @map("id") @db.Uuid
+  orderId              String             @map("order_id") @db.Uuid
+  order                Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  drugId               String             @map("drug_id") @db.Uuid
+  drug                 Drug               @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  providerItemId       String?            @map("provider_item_id")
+  price                Decimal            @default(0) @map("price") @db.Decimal(12, 4)
+  quantity             Int?               @map("quantity")
+  qty                  String?            @map("qty")
+  qtyUnits             String?            @map("qty_units")
+  metadata             Json?              @map("metadata")
+  amount               Decimal            @default(0) @map("amount") @db.Decimal(12, 4)
+  status               String             @map("status")
+  refillCount          Int                @default(0) @map("refill_count")
+  direction            String?            @map("direction")
+  prescriptionSourceId Int?               @map("prescription_source_id")
+  supplyDays           Int?               @map("supply_days")
+  prescriberNotes      String?            @map("prescriber_notes")
+  statusUpdatedAt      DateTime           @default(now()) @map("status_updated_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  histories            OrderItemHistory[]
+
+  @@map("order_items")
+}
+
+model Shipping {
+  id              String   @id @default(uuid()) @map("id") @db.Uuid
+  orderId         String   @map("order_id") @db.Uuid
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  description     String?   @map("description")
+  location        String?  @map("location")
+  statusUpdatedAt DateTime @default(now()) @map("status_updated_at")
+  message   String?   @map("message")
+  status    String?   @map("status")
+  trackingStatus ShippingStatus? @map("tracking_status")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("order_shippings")
+}
+
+model OrderItemHistory {
+  id              String    @id @default(uuid()) @map("id") @db.Uuid
+  itemId          String    @map("item_id") @db.Uuid
+  item            OrderItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  status          String    @default("PENDING") @map("status")
+  statusUpdatedAt DateTime  @default(now()) @map("status_updated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("order_item_histories")
+}
+
+model TenantWebhook {
+  id          String             @id @default(uuid()) @map("id") @db.Uuid
+  url         String             @map("url")
+  isEnabled   Boolean            @default(true) @map("is_enabled")
+  secret      String             @map("secret")
+  tenantId    String             @map("tenant_id") @db.Uuid
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  failCount   Int                @default(0) @map("fail_count")
+  createdById String             @map("created_by_id") @db.Uuid
+  createdBy   User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  logs        TenantWebhookLog[]
+
+  @@map("tenant_webhooks")
+}
+
+model WebhookLog {
+  id        String   @id @default(uuid()) @map("id") @db.Uuid
+  url       String   @map("url")
+  body      Json     @map("body")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("webhook_logs")
+}
+
+model TenantWebhookLog {
+  id        String        @id @default(uuid()) @map("id") @db.Uuid
+  webhookId String        @map("webhook_id") @db.Uuid
+  webhook   TenantWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  url       String        @map("url")
+  status    Int           @map("status")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  @@map("tenant_webhook_logs")
+}
+
+model Address {
+  id                       String      @id @default(uuid()) @map("id") @db.Uuid
+  street1                  String      @map("street_1")
+  street2                  String?     @map("street_2")
+  city                     String      @map("city")
+  state                    String      @map("state")
+  zip                      String      @map("zip")
+  country                  String      @default("US") @map("country_code")
+  orderId                  String?     @unique @map("order_id") @db.Uuid
+  order                    Order?      @relation("orderAddress", fields: [orderId], references: [id], onDelete: SetNull)
+  prescriberOrderAddressId String?     @unique @map("prescriberOrder_id") @db.Uuid
+  prescriberOrderAddress   Order?      @relation("prescriberOrderAddress", fields: [prescriberOrderAddressId], references: [id], onDelete: SetNull)
+  partnerId                String?     @unique @map("partner_id") @db.Uuid
+  partner                  Partner?    @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  tenantId                 String?     @map("tenant_id") @db.Uuid
+  tenant                   Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId                String?     @map("patient_id") @db.Uuid
+  patient                  Patient?    @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  prescriberId             String?     @map("prescriber_id") @db.Uuid
+  prescriber               Prescriber? @relation(fields: [prescriberId], references: [id], onDelete: SetNull)
+  createdAt                DateTime    @default(now()) @map("created_at")
+  updatedAt                DateTime    @updatedAt @map("updated_at")
+
+  @@map("addresses")
+}
+
+model Partner {
+  id          String   @id @default(uuid()) @map("id") @db.Uuid
+  name        String   @map("name")
+  code        String   @unique @map("code")
+  address     Address?
+  phoneNumber String?  @map("phone_number")
+  email       String?  @map("email")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  orders      Order[]
+  drugs       Drug[]
+
+  @@map("partners")
+}
+
+model PrescriberStateLicense {
+  id           String     @id @default(uuid()) @map("id") @db.Uuid
+  prescriberId String     @map("prescriber_id") @db.Uuid
+  prescriber   Prescriber @relation(fields: [prescriberId], references: [id], onDelete: Cascade)
+  state        String     @map("state")
+  country      String     @default("US") @map("country_code")
+  license      String     @map("license")
+
+  @@unique(name: "uniquePrescriberStateLicense", fields: [prescriberId, state, country])
+  @@map("prescriber_state_licenses")
+}
