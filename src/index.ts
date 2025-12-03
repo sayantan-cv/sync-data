@@ -43,8 +43,15 @@ function formatPhoneNumber(phone: string): string {
 }
 
 async function processCSV() {
+  // Parse the DATABASE_URL to ensure all components are strings
+  const connectionString = process.env.DATABASE_URL;
+
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+
   const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: connectionString,
   });
 
   const adapter = new PrismaPg(pool);
