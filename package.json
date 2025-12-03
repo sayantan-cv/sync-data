@@ -6,6 +6,7 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
+    "insert": "ts-node src/insert.ts",
     "build": "tsc",
     "prisma:generate": "prisma generate"
   },
