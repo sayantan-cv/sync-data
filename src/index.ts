@@ -1,4 +1,4 @@
-import { PrismaClient, Gender, Patient } from '@prisma/client';
+import { PrismaClient, Prisma, Gender } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import * as fs from 'fs';
@@ -56,7 +56,7 @@ async function processCSV() {
 
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
-  let patientsToCreate: Patient[] = [];
+  let patientsToCreate: Prisma.PatientCreateManyInput[] = [];
 
   try {
     const inputFile = path.join(process.cwd(), 'PerfectRx.csv');
@@ -172,6 +172,8 @@ async function processCSV() {
         const gender = convertGender(columns[5]?.trim() || '');
         const phone = formatPhoneNumber(columns[7]?.trim() || '');
 
+        let isValidUUIDUpdate = false;
+
         // Check if partner_external_id is a valid UUID
         if (partnerExternalId && isValidUUID(partnerExternalId)) {
           // Use the existing UUID
@@ -179,6 +181,7 @@ async function processCSV() {
         } else {
           // Generate a new UUID
           updatePartnerExternalId = randomUUID();
+          isValidUUIDUpdate = true
         }
 
         // Create user in pharma backend system
@@ -215,12 +218,10 @@ async function processCSV() {
             gender: gender,
             phoneNumber: phone,
             createdById: createdById,
-            ssn: null,
-            metadata: null,
             createdAt: new Date(),
             updatedAt: new Date(),
           })
-          updatePartnerExternalId = '';
+          !isValidUUIDUpdate && (updatePartnerExternalId = '');
         } catch (error) {
           console.error(`Error creating patient for email ${email}:`, error);
           // Continue processing even if creation fails
