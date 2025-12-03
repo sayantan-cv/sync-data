@@ -1,4 +1,4 @@
-import { PrismaClient, Gender } from '@prisma/client';
+import { PrismaClient, Gender, Patient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import * as fs from 'fs';
@@ -49,10 +49,12 @@ async function processCSV() {
 
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
+  let patientsToCreate: Patient[] = [];
 
   try {
     const inputFile = path.join(process.cwd(), 'PerfectRx.csv');
     const outputFile = path.join(process.cwd(), 'output.csv');
+    const outputFileToBeCreated = path.join(process.cwd(), 'output.json');
 
     console.log('Reading CSV file...');
     const fileContent = fs.readFileSync(inputFile, 'utf-8');
@@ -147,7 +149,10 @@ async function processCSV() {
       // Check if email is found in database
       if (email && email !== '' && patientEmailMap.has(email)) {
         // Email found: use the patient UUID from database
-        updatePartnerExternalId = patientEmailMap.get(email) || '';
+        const existingId = columns[1]?.trim();
+        if (existingId !== patientEmailMap.get(email)) {
+          updatePartnerExternalId = patientEmailMap.get(email) || '';
+        }
         foundCount++;
       } else {
         // Email not found
@@ -180,19 +185,35 @@ async function processCSV() {
             throw new Error('Missing required environment variables');
           }
 
-          await prisma.patient.create({
-            data: {
-              id: updatePartnerExternalId,
-              tenantId: tenantId,
-              email: email.toLowerCase(),
-              firstName: firstName,
-              lastName: lastName,
-              dob: new Date(dob),
-              gender: gender,
-              phoneNumber: phone,
-              createdById: createdById,
-            }
-          });
+          // await prisma.patient.create({
+          //   data: {
+          //     id: updatePartnerExternalId,
+          //     tenantId: tenantId,
+          //     email: email.toLowerCase(),
+          //     firstName: firstName,
+          //     lastName: lastName,
+          //     dob: new Date(dob),
+          //     gender: gender,
+          //     phoneNumber: phone,
+          //     createdById: createdById,
+          //   }
+          // });
+          patientsToCreate.push({
+            id: updatePartnerExternalId,
+            tenantId: tenantId,
+            email: email.toLowerCase(),
+            firstName: firstName,
+            lastName: lastName,
+            dob: new Date(dob),
+            gender: gender,
+            phoneNumber: phone,
+            createdById: createdById,
+            ssn: null,
+            metadata: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          updatePartnerExternalId = '';
         } catch (error) {
           console.error(`Error creating patient for email ${email}:`, error);
           // Continue processing even if creation fails
@@ -208,6 +229,8 @@ async function processCSV() {
         console.log(`Processed ${processedCount} / ${lines.length - 1} records...`);
       }
     }
+    const writeStream2 = fs.createWriteStream(outputFileToBeCreated);
+    writeStream2.write(JSON.stringify(patientsToCreate));
 
     // Wait for the stream to finish writing
     await new Promise<void>((resolve, reject) => {
