@@ -232,13 +232,21 @@ async function processCSV() {
     const writeStream2 = fs.createWriteStream(outputFileToBeCreated);
     writeStream2.write(JSON.stringify(patientsToCreate));
 
-    // Wait for the stream to finish writing
-    await new Promise<void>((resolve, reject) => {
-      writeStream.end(() => {
-        resolve();
-      });
-      writeStream.on('error', reject);
-    });
+    // Wait for both streams to finish writing
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        writeStream.end(() => {
+          resolve();
+        });
+        writeStream.on('error', reject);
+      }),
+      new Promise<void>((resolve, reject) => {
+        writeStream2.end(() => {
+          resolve();
+        });
+        writeStream2.on('error', reject);
+      })
+    ]);
 
     console.log('\n Processing completed!');
     console.log(`Output file created: ${outputFile}`);
